@@ -1,0 +1,14 @@
+[
+{
+  "directory": "/home/gmmyung/Develop/heightmapAugment/build/temp.linux-x86_64-cpython-311",
+  "command": "/usr/bin/c++ -DEIGEN_DONT_PARALLELIZE -DEIGEN_NO_DEBUG -DRAISIMGYM_TORCH_ENV_NAME=rsg_anymal -DdIDEDOUBLE -Drsg_anymal_EXPORTS -I/usr/include/eigen3 -I/home/gmmyung/Develop/heightmapAugment/raisimGymTorch/env/envs/rsg_anymal -I/home/gmmyung/Develop/heightmapAugment/raisimGymTorch/env -isystem /home/gmmyung/Develop/heightmapAugment/thirdParty/pybind11/include -isystem /home/gmmyung/miniforge3/envs/raisim/include/python3.11 -isystem /home/gmmyung/Develop/raisim/include -DVERSION_INFO=\\\"1.1.7\\\" -fopenmp -O3 -DNDEBUG -std=gnu++17 -fPIC -fvisibility=hidden -fPIC -O3 -flto -mno-avx2 -fno-fat-lto-objects -o CMakeFiles/rsg_anymal.dir/raisimGymTorch/env/raisim_gym.cpp.o -c /home/gmmyung/Develop/heightmapAugment/raisimGymTorch/env/raisim_gym.cpp",
+  "file": "/home/gmmyung/Develop/heightmapAugment/raisimGymTorch/env/raisim_gym.cpp",
+  "output": "CMakeFiles/rsg_anymal.dir/raisimGymTorch/env/raisim_gym.cpp.o"
+},
+{
+  "directory": "/home/gmmyung/Develop/heightmapAugment/build/temp.linux-x86_64-cpython-311",
+  "command": "/usr/bin/c++ -DEIGEN_DONT_PARALLELIZE -DEIGEN_NO_DEBUG -DRAISIMGYM_TORCH_ENV_NAME=rsg_anymal -DdIDEDOUBLE -Drsg_anymal_EXPORTS -I/usr/include/eigen3 -I/home/gmmyung/Develop/heightmapAugment/raisimGymTorch/env/envs/rsg_anymal -I/home/gmmyung/Develop/heightmapAugment/raisimGymTorch/env -isystem /home/gmmyung/Develop/heightmapAugment/thirdParty/pybind11/include -isystem /home/gmmyung/miniforge3/envs/raisim/include/python3.11 -isystem /home/gmmyung/Develop/raisim/include -DVERSION_INFO=\\\"1.1.7\\\" -fopenmp -O3 -DNDEBUG -std=gnu++17 -fPIC -fvisibility=hidden -fPIC -O3 -flto -mno-avx2 -fno-fat-lto-objects -o CMakeFiles/rsg_anymal.dir/raisimGymTorch/env/Yaml.cpp.o -c /home/gmmyung/Develop/heightmapAugment/raisimGymTorch/env/Yaml.cpp",
+  "file": "/home/gmmyung/Develop/heightmapAugment/raisimGymTorch/env/Yaml.cpp",
+  "output": "CMakeFiles/rsg_anymal.dir/raisimGymTorch/env/Yaml.cpp.o"
+}
+]

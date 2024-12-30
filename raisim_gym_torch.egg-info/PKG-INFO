@@ -1,0 +1,8 @@
+Metadata-Version: 2.1
+Name: raisim_gym_torch
+Version: 1.1.7
+Summary: gym for raisim using torch.
+Author: Jemin Hwangbo
+Author-email: jemin.hwangbo@gmail.com
+License: proprietary
+License-File: LICENSE
