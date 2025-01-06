@@ -6,8 +6,8 @@ from raisimGymTorch.helper.raisim_gym_helper import (
     load_param,
     tensorboard_launcher,
 )
-from raisimGymTorch.env.bin.rsg_anymal import NormalSampler
-from raisimGymTorch.env.bin.rsg_anymal import RaisimGymEnv
+from raisimGymTorch.env.bin.rsg_raibo import NormalSampler
+from raisimGymTorch.env.bin.rsg_raibo import RaisimGymEnv
 from raisimGymTorch.env.RewardAnalyzer import RewardAnalyzer
 import os
 import math
@@ -22,7 +22,7 @@ import argparse
 
 
 # task specification
-task_name = "anymal_locomotion"
+task_name = "raibo2_locomotion"
 
 # configuration
 parser = argparse.ArgumentParser()

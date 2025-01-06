@@ -1,5 +1,5 @@
 from ruamel.yaml import YAML, dump, RoundTripDumper
-from raisimGymTorch.env.bin import rsg_anymal
+from raisimGymTorch.env.bin import rsg_raibo
 from raisimGymTorch.env.RaisimGymVecEnv import RaisimGymVecEnv as VecEnv
 import raisimGymTorch.algo.ppo.module as ppo_module
 import os
@@ -25,7 +25,7 @@ cfg = YAML().load(open(task_path + "/cfg.yaml", "r"))
 cfg["environment"]["num_envs"] = 1
 
 env = VecEnv(
-    rsg_anymal.RaisimGymEnv(
+    rsg_raibo.RaisimGymEnv(
         home_path + "/rsc", dump(cfg["environment"], Dumper=RoundTripDumper)
     ),
     cfg["environment"],

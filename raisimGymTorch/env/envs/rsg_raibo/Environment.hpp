@@ -5,9 +5,9 @@
 
 #pragma once
 
-#include "../../RaisimGymEnv.hpp"
+#include "MyRewards.hpp"
+#include "RaisimGymEnv.hpp"
 #include <random> // For std::mt19937, std::normal_distribution
-#include <set>
 
 namespace raisim {
 
@@ -17,7 +17,6 @@ public:
                        bool visualizable)
       : RaisimGymEnv(resourceDir, cfg), visualizable_(visualizable),
         normDist_(0.0, 1.0) {
-
     createWorld();
     addRobotAndGround();
     initializeDimensions();
@@ -34,7 +33,7 @@ public:
   }
 
   void reset() final {
-    anymal_->setState(gc_init_, gv_init_);
+    raibo_->setState(gc_init_, gv_init_);
     updateObservation();
   }
 
@@ -43,11 +42,9 @@ public:
     simulate();
     updateObservation();
 
-    // Record rewards
-    rewards_.record("torque", anymal_->getGeneralizedForce().squaredNorm());
-    rewards_.record("forwardVel", std::min(4.0, bodyLinearVel_[0]));
+    rewards_->update();
 
-    return rewards_.sum();
+    return rewards_->sum();
   }
 
   void observe(Eigen::Ref<EigenVec> ob) final {
@@ -59,7 +56,7 @@ public:
     terminalReward = static_cast<float>(terminalRewardCoeff_);
 
     // If a contact body is not one of the feet, episode terminates
-    for (auto &contact : anymal_->getContacts()) {
+    for (auto &contact : raibo_->getContacts()) {
       if (footIndices_.find(contact.getlocalBodyIndex()) ==
           footIndices_.end()) {
         return true;
@@ -82,16 +79,16 @@ private:
   void createWorld() { world_ = std::make_unique<raisim::World>(); }
 
   void addRobotAndGround() {
-    anymal_ =
+    raibo_ =
         world_->addArticulatedSystem(resourceDir_ + "/raibo2/urdf/raibo2.urdf");
-    anymal_->setName("anymal");
-    anymal_->setControlMode(raisim::ControlMode::PD_PLUS_FEEDFORWARD_TORQUE);
+    raibo_->setName("raibo");
+    raibo_->setControlMode(raisim::ControlMode::PD_PLUS_FEEDFORWARD_TORQUE);
     world_->addGround();
   }
 
   void initializeDimensions() {
-    gcDim_ = anymal_->getGeneralizedCoordinateDim();
-    gvDim_ = anymal_->getDOF();
+    gcDim_ = raibo_->getGeneralizedCoordinateDim();
+    gvDim_ = raibo_->getDOF();
     nJoints_ = gvDim_ - 6;
   }
 
@@ -122,8 +119,8 @@ private:
     jointPgain.tail(nJoints_).setConstant(joint_p_gain);
     jointDgain.tail(nJoints_).setConstant(joint_d_gain);
 
-    anymal_->setPdGains(jointPgain, jointDgain);
-    anymal_->setGeneralizedForce(Eigen::VectorXd::Zero(gvDim_));
+    raibo_->setPdGains(jointPgain, jointDgain);
+    raibo_->setGeneralizedForce(Eigen::VectorXd::Zero(gvDim_));
   }
 
   void setupObservationAndAction(const Yaml::Node &cfg) {
@@ -143,15 +140,14 @@ private:
   }
 
   void setupReward(const Yaml::Node &cfg) {
-    // Reward coefficients
-    rewards_.initializeFromConfigurationFile(cfg["reward"]);
+    rewards_ = std::make_unique<MyRewards>(cfg["reward"], raibo_);
   }
 
   void defineFootIndices() {
-    footIndices_.insert(anymal_->getBodyIdx("LF_SHANK"));
-    footIndices_.insert(anymal_->getBodyIdx("RF_SHANK"));
-    footIndices_.insert(anymal_->getBodyIdx("LH_SHANK"));
-    footIndices_.insert(anymal_->getBodyIdx("RH_SHANK"));
+    footIndices_.insert(raibo_->getBodyIdx("LF_SHANK"));
+    footIndices_.insert(raibo_->getBodyIdx("RF_SHANK"));
+    footIndices_.insert(raibo_->getBodyIdx("LH_SHANK"));
+    footIndices_.insert(raibo_->getBodyIdx("RH_SHANK"));
   }
 
   void launchServerIfVisualizable() {
@@ -159,7 +155,7 @@ private:
       return;
     server_ = std::make_unique<raisim::RaisimServer>(world_.get());
     server_->launchServer();
-    server_->focusOn(anymal_);
+    server_->focusOn(raibo_);
   }
 
   void applyAction(const Eigen::Ref<EigenVec> &action) {
@@ -168,7 +164,7 @@ private:
     pTarget12_ = pTarget12_.cwiseProduct(actionStd_) + actionMean_;
     pTarget_.tail(nJoints_) = pTarget12_;
 
-    anymal_->setPdTarget(pTarget_, vTarget_);
+    raibo_->setPdTarget(pTarget_, vTarget_);
   }
 
   void simulate() {
@@ -184,7 +180,7 @@ private:
   }
 
   void updateObservation() {
-    anymal_->getState(gc_, gv_);
+    raibo_->getState(gc_, gv_);
 
     // Extract rotation matrix
     raisim::Vec<4> quat{gc_[3], gc_[4], gc_[5], gc_[6]};
@@ -208,7 +204,7 @@ private:
   // ----------------------------------------------------------------------------
 private:
   // Robot, environment
-  raisim::ArticulatedSystem *anymal_{nullptr};
+  raisim::ArticulatedSystem *raibo_{nullptr};
   bool visualizable_{false};
 
   // Dimensions
@@ -226,7 +222,6 @@ private:
 
   // Observations
   Eigen::VectorXd obDouble_;
-  int obDim_{0}, actionDim_{0};
 
   // Body velocities
   Eigen::Vector3d bodyLinearVel_, bodyAngularVel_;
@@ -241,8 +236,5 @@ private:
   std::normal_distribution<double> normDist_;
   thread_local static std::mt19937 gen_;
 };
-
-// Definition of the static thread_local generator
-thread_local std::mt19937 ENVIRONMENT::gen_;
 
 } // namespace raisim
