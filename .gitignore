@@ -9,3 +9,4 @@ raisimGymTorch/data/anymal_locomotion
 raisimGymTorch/env/__pycache__
 raisimGymTorch/env/bin/__pycache__
 raisimGymTorch/helper/__pycache__
+raisim_gym_torch.egg-info
