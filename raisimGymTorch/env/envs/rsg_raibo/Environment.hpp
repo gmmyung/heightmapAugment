@@ -16,7 +16,7 @@ public:
   explicit ENVIRONMENT(const std::string &resourceDir, const Yaml::Node &cfg,
                        bool visualizable)
       : RaisimGymEnv(resourceDir, cfg), visualizable_(visualizable),
-        normDist_(0.0, 1.0) {
+        normDist_(0.0, 1.0), unifDist_(0.0, 1.0) {
     createWorld();
     addRobotAndGround();
     initializeDimensions();
@@ -24,6 +24,7 @@ public:
     configureRobot(cfg);
     setupObservationAndAction(cfg);
     setupReward(cfg);
+    setupCommand(cfg);
     defineFootIndices();
     launchServerIfVisualizable();
   }
@@ -40,6 +41,7 @@ public:
   float step(const Eigen::Ref<EigenVec> &action) final {
     applyAction(action);
     simulate();
+    updateCommands();
     updateObservation();
 
     rewards_->update();
@@ -70,6 +72,8 @@ public:
   void curriculumUpdate() final {
     // No curriculum strategy for now
   }
+
+  void setSeed(int seed) final { gen_.seed(seed); }
 
 private:
   // ----------------------------------------------------------------------------
@@ -125,7 +129,8 @@ private:
 
   void setupObservationAndAction(const Yaml::Node &cfg) {
     // Must be done for all environments
-    obDim_ = 34;
+    // 2 * 12 joints + 3 lin_vel + 3 ang_vel + 3 z_axis + 1 height + 3 commands
+    obDim_ = 37;
     actionDim_ = nJoints_;
     actionMean_.setZero(actionDim_);
     actionStd_.setZero(actionDim_);
@@ -140,7 +145,22 @@ private:
   }
 
   void setupReward(const Yaml::Node &cfg) {
-    rewards_ = std::make_unique<MyRewards>(cfg["reward"], raibo_);
+    rewards_ = std::make_unique<MyRewards>(cfg["reward"], raibo_, commands_);
+  }
+
+  void setupCommand(const Yaml::Node &cfg) {
+    command_interval_ = cfg["command_interval"].As<double>();
+  }
+
+  void updateCommands() {
+    command_counter_ += 1;
+    if (command_length_ < command_counter_) {
+      commands_[0] = (unifDist_(gen_) - 0.5) * 2; // x
+      commands_[1] = unifDist_(gen_);             // y
+      commands_[2] = (unifDist_(gen_) - 0.5) * 2; // z
+      command_counter_ = 0;
+      command_length_ = command_interval_ / control_dt_ * unifDist_(gen_) * 2;
+    }
   }
 
   void defineFootIndices() {
@@ -190,13 +210,14 @@ private:
     // Compute body velocity in body frame
     bodyLinearVel_ = rot.e().transpose() * gv_.head<3>();
     bodyAngularVel_ = rot.e().transpose() * gv_.segment<3>(3);
+    Eigen::Vector3d commands(commands_[0], commands_[1], commands_[2]);
 
     obDouble_ << gc_[2],            // body height
         rot.e().row(2).transpose(), // body orientation (z-axis)
-        gc_.tail(12),               // joint angles
         bodyLinearVel_,             // body linear velocity
         bodyAngularVel_,            // body angular velocity
-        gv_.tail(12);               // joint velocities
+        gv_.tail(12),               // joint velocities
+        commands;                   // commands
   }
 
   // ----------------------------------------------------------------------------
@@ -229,12 +250,23 @@ private:
   // Foot indices
   std::set<size_t> footIndices_;
 
+  // Command change counter
+  size_t command_counter_{0};
+
   // Reward
   double terminalRewardCoeff_{-10.0};
 
+  // Commands
+  std::array<double, 3> commands_{0.0, 0.0, 0.0};
+  double command_interval_{0.0};
+  size_t command_length_{0};
+
   // Random number generator
   std::normal_distribution<double> normDist_;
+  std::uniform_real_distribution<double> unifDist_;
   thread_local static std::mt19937 gen_;
 };
+
+thread_local std::mt19937 raisim::ENVIRONMENT::gen_;
 
 } // namespace raisim
