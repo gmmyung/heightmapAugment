@@ -12,3 +12,5 @@ raisimGymTorch/helper/__pycache__
 raisim_gym_torch.egg-info
 raisimGymTorch/data/raibo2_locomotion
 build/compile_commands.json
+.venv
+build/temp.linux-x86_64-cpython-312

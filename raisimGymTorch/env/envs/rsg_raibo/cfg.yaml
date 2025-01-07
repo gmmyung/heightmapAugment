@@ -14,11 +14,11 @@ environment:
   joint_d_gain: 1.0
   command_interval: 3.0
   reward:
-    command_vel:
-      max_x: 2.0
-      max_y: 5.0
+    command_vel_error:
+      max_x: 5.0
+      max_y: 2.0
       max_ang: 2.0
-      coeff: 0.3
+      coeff: 1.0
     torque:
       coeff: -4e-5
 
