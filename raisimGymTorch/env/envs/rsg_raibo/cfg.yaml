@@ -22,7 +22,7 @@ environment:
     torque:
       coeff: -4e-5
     air_time:
-      coeff: 10.0
+      coeff: 20.0
 
 architecture:
   policy_net: [128, 128]

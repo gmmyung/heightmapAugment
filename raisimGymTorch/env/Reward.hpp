@@ -88,6 +88,7 @@ public:
   }
 
   virtual void update() {}
+  virtual void getFootHolds(Eigen::Ref<Eigen::VectorXf> foot_holds) {}
 
 private:
   std::map<std::string, raisim::RewardElement> rewards_;

@@ -100,6 +100,12 @@ public:
       perAgentStep(i, action, reward, done);
   }
 
+  void getFootHolds(Eigen::Ref<EigenRowMajorMat> &footHolds) {
+    for (int i = 0; i < num_envs_; i++) {
+      environments_[i]->getFootHolds(footHolds.row(i));
+    }
+  }
+
   void turnOnVisualization() {
     if (render_)
       environments_[0]->turnOnVisualization();

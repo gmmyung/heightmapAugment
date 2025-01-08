@@ -17,6 +17,7 @@ public:
       : raibo_(raibo), commands_(commands), control_dt_(control_dt),
         foot_indices_(foot_indices.begin(), foot_indices.end()),
         contacts_(foot_indices_.size(), false),
+        first_contacts_(foot_indices_.size(), false),
         air_times_(foot_indices_.size(), 0.) {
     initializeFromConfigurationFile(cfg);
     setupReward(cfg);
@@ -68,8 +69,8 @@ public:
     double air_time_sum{0.};
 
     for (size_t i = 0; i < foot_indices_.size(); ++i) {
-      bool first_contact = air_times_[i] != 0. && contacts_[i];
-      if (first_contact) {
+      first_contacts_[i] = air_times_[i] != 0. && contacts_[i];
+      if (first_contacts_[i]) {
         air_time_sum += air_times_[i] - 0.5;
       }
       if (contacts_[i]) {
@@ -81,12 +82,25 @@ public:
     record("air_time", air_time_sum);
   }
 
+  void getFootHolds(Eigen::Ref<Eigen::VectorXf> foot_holds) override {
+    for (size_t i = 0; i < foot_indices_.size(); ++i) {
+      if (first_contacts_[i]) {
+        raisim::Vec<3> foot_pos;
+        raibo_->getBodyPosition(foot_indices_[i], foot_pos);
+        foot_holds.segment<3>(3 * i) << foot_pos[0], foot_pos[1], foot_pos[2];
+      } else {
+        foot_holds.segment<3>(3 * i) << 0, 0, 0;
+      }
+    }
+  }
+
 private:
   raisim::ArticulatedSystem *raibo_{nullptr};
   double control_dt_;
   const std::array<double, 3> &commands_;
   const std::vector<size_t> foot_indices_;
   std::vector<bool> contacts_;
+  std::vector<bool> first_contacts_;
   std::vector<double> air_times_;
   double command_max_x_, command_max_y_, command_max_ang_;
 

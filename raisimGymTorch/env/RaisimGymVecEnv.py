@@ -19,6 +19,7 @@ class RaisimGymVecEnv:
         self.num_acts = self.wrapper.getActionDim()
         self._observation = np.zeros([self.num_envs, self.num_obs], dtype=np.float32)
         self.actions = np.zeros([self.num_envs, self.num_acts], dtype=np.float32)
+        self.footholds = np.zeros([self.num_envs, 12], dtype=np.float32)
         self.log_prob = np.zeros(self.num_envs, dtype=np.float32)
         self._reward = np.zeros(self.num_envs, dtype=np.float32)
         self._done = np.zeros(self.num_envs, dtype=bool)
@@ -68,6 +69,10 @@ class RaisimGymVecEnv:
 
     def get_reward_info(self):
         return self.wrapper.getRewardInfo()
+
+    def get_footholds(self):
+        self.wrapper.getFootHolds(self.footholds)
+        return self.footholds.reshape(self.num_envs, 4, 3)
 
     def reset(self):
         self._reward = np.zeros(self.num_envs, dtype=np.float32)

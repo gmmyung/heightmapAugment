@@ -69,6 +69,10 @@ public:
     return false;
   }
 
+  void getFootHolds(Eigen::Ref<Eigen::VectorXf> footHolds) {
+    rewards_->getFootHolds(footHolds);
+  }
+
   void curriculumUpdate() final {
     // No curriculum strategy for now
   }
