@@ -64,8 +64,18 @@ class TerrainGenerator:
                 int(x + width * math.cos(rotation) + length * math.sin(rotation)),
             ),
         )
-        bounding_box = (min(bounding_box[0], bounding_box[1]), max(bounding_box[0], bounding_box[1]), min(bounding_box[2], bounding_box[3]), max(bounding_box[2], bounding_box[3]))
-        bounding_box = (max(0, bounding_box[0]), min(self.terrain.shape[0], bounding_box[1]), max(0, bounding_box[2]), min(self.terrain.shape[1], bounding_box[3]))
+        bounding_box = (
+            min(bounding_box[0], bounding_box[1]),
+            max(bounding_box[0], bounding_box[1]),
+            min(bounding_box[2], bounding_box[3]),
+            max(bounding_box[2], bounding_box[3]),
+        )
+        bounding_box = (
+            max(0, bounding_box[0]),
+            min(self.terrain.shape[0], bounding_box[1]),
+            max(0, bounding_box[2]),
+            min(self.terrain.shape[1], bounding_box[3]),
+        )
         starting_height = np.max(
             self.terrain[
                 bounding_box[0] : bounding_box[1],
@@ -99,7 +109,10 @@ class TerrainGenerator:
         y = int(y // self.dx)
         radius = int(radius // self.dx)
         starting_height = np.max(
-            self.terrain[max(0,y - radius) : min(self.height, y + radius), max(0,x - radius) : min(self.width, x + radius)]
+            self.terrain[
+                max(0, y - radius) : min(self.height, y + radius),
+                max(0, x - radius) : min(self.width, x + radius),
+            ]
         )
 
         cv2.circle(self.terrain, (x, y), radius, starting_height + height, -1)
@@ -231,7 +244,7 @@ class TerrainGenerator:
             )
         # add random number of random features
         num_features = random.randint(0, 20)
-        if random.uniform(0,1) < 0.5:
+        if random.uniform(0, 1) < 0.5:
             # decrease feature count when stepping stones are added
             num_features = 5
             # generate stepping stones
@@ -244,8 +257,8 @@ class TerrainGenerator:
                 num_stones,
                 stone_radius,
                 random.uniform(0.1, 1.0),
-                random.uniform(self.size[0]/4, self.size[0] * 3 / 4),
-                random.uniform(self.size[1]/4, self.size[1] * 3 / 4),
+                random.uniform(self.size[0] / 4, self.size[0] * 3 / 4),
+                random.uniform(self.size[1] / 4, self.size[1] * 3 / 4),
                 random.uniform(0, 2 * math.pi),
             )
         # uniform distribution of features
@@ -276,6 +289,7 @@ class TerrainGenerator:
                     random.uniform(2.0, 5.0),
                     random.uniform(0.0, math.pi),
                 )
+
 
 if __name__ == "__main__":
     import matplotlib.pyplot as plt

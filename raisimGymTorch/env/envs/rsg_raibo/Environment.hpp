@@ -23,9 +23,9 @@ public:
     initializeInitialStates();
     configureRobot(cfg);
     setupObservationAndAction(cfg);
+    defineFootIndices();
     setupReward(cfg);
     setupCommand(cfg);
-    defineFootIndices();
     launchServerIfVisualizable();
   }
 
@@ -145,7 +145,8 @@ private:
   }
 
   void setupReward(const Yaml::Node &cfg) {
-    rewards_ = std::make_unique<MyRewards>(cfg["reward"], raibo_, commands_);
+    rewards_ = std::make_unique<MyRewards>(cfg["reward"], raibo_, commands_,
+                                           footIndices_, control_dt_);
   }
 
   void setupCommand(const Yaml::Node &cfg) {
