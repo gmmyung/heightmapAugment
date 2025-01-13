@@ -29,12 +29,14 @@ def parse_arguments():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "-m", "--mode", help="Set mode either train or test or retrain", 
-        type=str, default="train"
+        "-m",
+        "--mode",
+        help="Set mode either train or test or retrain",
+        type=str,
+        default="train",
     )
     parser.add_argument(
-        "-w", "--weight", help="Path to pre-trained weight", 
-        type=str, default=""
+        "-w", "--weight", help="Path to pre-trained weight", type=str, default=""
     )
     return parser.parse_args()
 
@@ -89,7 +91,9 @@ def save_model(update, saver, actor, critic, optimizer):
 
 def load_graph_for_evaluation(cfg, ob_dim, act_dim, model_path):
     """Load a new MLP for evaluation from a saved checkpoint."""
-    loaded_graph = ppo_module.MLP(cfg["architecture"]["policy_net"], nn.LeakyReLU, ob_dim, act_dim)
+    loaded_graph = ppo_module.MLP(
+        cfg["architecture"]["policy_net"], nn.LeakyReLU, ob_dim, act_dim
+    )
     checkpoint = torch.load(model_path)
     loaded_graph.load_state_dict(checkpoint["actor_architecture_state_dict"])
     return loaded_graph
@@ -98,10 +102,14 @@ def load_graph_for_evaluation(cfg, ob_dim, act_dim, model_path):
 def evaluate_policy(env, ppo, loaded_graph, reward_analyzer, cfg, update):
     """Evaluate the current policy by visualizing, recording a video, and collecting reward info."""
     env.turn_on_visualization()
-    video_filename = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S") + f"policy_{update}.mp4"
+    video_filename = (
+        datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S") + f"policy_{update}.mp4"
+    )
     env.start_video_recording(video_filename)
 
-    n_steps = math.floor(cfg["environment"]["max_time"] / cfg["environment"]["control_dt"])
+    n_steps = math.floor(
+        cfg["environment"]["max_time"] / cfg["environment"]["control_dt"]
+    )
     for _ in range(n_steps):
         with torch.no_grad():
             frame_start = time.time()
@@ -146,7 +154,9 @@ def main():
     act_dim = env.num_acts
 
     # Steps and other parameters
-    n_steps = math.floor(cfg["environment"]["max_time"] / cfg["environment"]["control_dt"])
+    n_steps = math.floor(
+        cfg["environment"]["max_time"] / cfg["environment"]["control_dt"]
+    )
     total_steps = n_steps * env.num_envs
 
     # Create actor and critic
@@ -181,7 +191,7 @@ def main():
     reward_analyzer = RewardAnalyzer(env, ppo.writer)
 
     # Foothold Predictor
-    foothold_predictor = FootHoldPredictor(cfg)
+    foothold_predictor = FootHoldPredictor(cfg, ppo.writer)
 
     # Optionally load weights if retraining
     if mode == "retrain" and weight_path:
@@ -191,6 +201,7 @@ def main():
     # Training loop
     # ----------------
     avg_rewards = []
+    avg_performance = 0
     for update in range(1_000_000):
         start_time = time.time()
         env.reset()
@@ -207,23 +218,20 @@ def main():
             evaluate_policy(env, ppo, loaded_graph, reward_analyzer, cfg, update)
             env.save_scaling(saver.data_dir, str(update))
 
+        foothold_update = update % 5 == 0 and avg_performance > 2.4
 
         # Collect experience
         for step in range(n_steps):
             obs = env.observe()
             action = ppo.act(obs)
             reward, dones = env.step(action)
-            foothold_predictor.step(env.get_footholds())
+
+            if foothold_update:
+                foothold_predictor.step(env.get_footholds())
+
             ppo.step(value_obs=obs, rews=reward, dones=dones)
             total_done += np.sum(dones)
             total_reward += np.sum(reward)
-        
-
-        if update % 10 == 0:
-            foothold_predictor.flatten_footholds()
-            foothold_predictor.train_lstm(epochs=20)
-            foothold_predictor.reset()
-
 
         # Final step for advantage/value calculation
         last_obs = env.observe()
@@ -238,6 +246,14 @@ def main():
         avg_performance = total_reward / total_steps
         avg_dones = total_done / total_steps
         avg_rewards.append(avg_performance)
+        
+        # Train foothold predictor
+        if foothold_update:
+            foothold_predictor.flatten_footholds()
+            foothold_predictor.train_lstm(20, update)
+            if update % 100 == 0:
+                foothold_predictor.plot_evaluation(update)
+            foothold_predictor.reset()
 
         # Update actor distribution parameters if needed
         actor.update()
@@ -265,4 +281,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

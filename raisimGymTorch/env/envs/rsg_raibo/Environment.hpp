@@ -160,8 +160,8 @@ private:
   void updateCommands() {
     command_counter_ += 1;
     if (command_length_ < command_counter_) {
-      commands_[0] = (unifDist_(gen_) - 0.5) * 2; // x
-      commands_[1] = unifDist_(gen_);             // y
+      commands_[0] = unifDist_(gen_);             // x
+      commands_[1] = (unifDist_(gen_) - 0.5) * 2; // y
       commands_[2] = (unifDist_(gen_) - 0.5) * 2; // z
       command_counter_ = 0;
       command_length_ = command_interval_ / control_dt_ * unifDist_(gen_) * 2;
