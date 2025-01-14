@@ -59,10 +59,22 @@ public:
 
     // If a contact body is not one of the feet, episode terminates
     for (auto &contact : raibo_->getContacts()) {
-      if (footIndices_.find(contact.getlocalBodyIndex()) ==
-          footIndices_.end()) {
+      size_t index = contact.getlocalBodyIndex();
+      if (footIndices_.find(index) == footIndices_.end()) {
         return true;
       }
+
+      // If contact is too far from the foot frame, episode terminates
+      for (const size_t &frameIndex : footFrameIndicies_) {
+        auto frame = raibo_->getFrameByIdx(frameIndex);
+        raisim::Vec<3> framePosition;
+        raibo_->getFramePosition(frameIndex, framePosition);
+
+        if ((contact.getPosition() - framePosition).squaredNorm() < 0.05) {
+          return false;
+        }
+      }
+      return true;
     }
 
     terminalReward = 0.f;
@@ -173,6 +185,10 @@ private:
     footIndices_.insert(raibo_->getBodyIdx("RF_SHANK"));
     footIndices_.insert(raibo_->getBodyIdx("LH_SHANK"));
     footIndices_.insert(raibo_->getBodyIdx("RH_SHANK"));
+    footFrameIndicies_.insert(raibo_->getFrameIdxByName("LF_S2F"));
+    footFrameIndicies_.insert(raibo_->getFrameIdxByName("RF_S2F"));
+    footFrameIndicies_.insert(raibo_->getFrameIdxByName("LH_S2F"));
+    footFrameIndicies_.insert(raibo_->getFrameIdxByName("RH_S2F"));
   }
 
   void launchServerIfVisualizable() {
@@ -253,7 +269,7 @@ private:
   Eigen::Vector3d bodyLinearVel_, bodyAngularVel_;
 
   // Foot indices
-  std::set<size_t> footIndices_;
+  std::set<size_t> footIndices_, footFrameIndicies_;
 
   // Command change counter
   size_t command_counter_{0};

@@ -1,207 +1,284 @@
-from ruamel.yaml import YAML, dump, RoundTripDumper
+import os
+import math
+import time
+import datetime
+import argparse
+
+import numpy as np
+import torch
+import torch.nn as nn
+
+from ruamel.yaml import YAML
 from ruamel.yaml.compat import StringIO
+
 from raisimGymTorch.env.RaisimGymVecEnv import RaisimGymVecEnv as VecEnv
+from raisimGymTorch.env.bin.rsg_raibo import RaisimGymEnv, NormalSampler
+from raisimGymTorch.env.RewardAnalyzer import RewardAnalyzer
+from foothold import FootHoldPredictor
+
 from raisimGymTorch.helper.raisim_gym_helper import (
     ConfigurationSaver,
     load_param,
     tensorboard_launcher,
 )
-from raisimGymTorch.env.bin.rsg_raibo import NormalSampler
-from raisimGymTorch.env.bin.rsg_raibo import RaisimGymEnv
-from raisimGymTorch.env.RewardAnalyzer import RewardAnalyzer
-import os
-import math
-import time
-import raisimGymTorch.algo.ppo.module as ppo_module
 import raisimGymTorch.algo.ppo.ppo as PPO
-import torch.nn as nn
-import numpy as np
-import torch
-import datetime
-import argparse
+import raisimGymTorch.algo.ppo.module as ppo_module
 
 
-# task specification
-task_name = "raibo2_locomotion"
 
-# configuration
-parser = argparse.ArgumentParser()
-parser.add_argument(
-    "-m", "--mode", help="set mode either train or test", type=str, default="train"
-)
-parser.add_argument(
-    "-w", "--weight", help="pre-trained weight path", type=str, default=""
-)
-args = parser.parse_args()
-mode = args.mode
-weight_path = args.weight
+def parse_arguments():
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "-m",
+        "--mode",
+        help="Set mode either train or test or retrain",
+        type=str,
+        default="train",
+    )
+    parser.add_argument(
+        "-w", "--weight", help="Path to pre-trained weight", type=str, default=""
+    )
+    return parser.parse_args()
 
-# check if gpu is available
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# directories
-task_path = os.path.dirname(os.path.realpath(__file__))
-home_path = task_path + "/../../../.."
+def create_environment(cfg, home_path):
+    """Create the VecEnv environment based on provided configuration."""
+    string_io = StringIO()
+    YAML().dump(cfg["environment"], string_io)
+    env = VecEnv(RaisimGymEnv(os.path.join(home_path, "rsc"), string_io.getvalue()))
+    env.seed(cfg["seed"])
+    return env
 
-# config
-cfg = YAML().load(open(task_path + "/cfg.yaml", "r"))
-string_io = StringIO()
-YAML().dump(cfg["environment"], string_io)
 
-# create environment from the configuration file
-env = VecEnv(RaisimGymEnv(home_path + "/rsc", string_io.getvalue()))
-env.seed(cfg["seed"])
+def create_actor_critic(cfg, ob_dim, act_dim, device):
+    """Create Actor and Critic modules for PPO."""
+    # Actor
+    actor_arch = ppo_module.MLP(
+        cfg["architecture"]["policy_net"], nn.LeakyReLU, ob_dim, act_dim
+    )
+    actor_dist = ppo_module.MultivariateGaussianDiagonalCovariance(
+        act_dim,
+        cfg["environment"]["num_envs"],
+        init_std=1.0,
+        fast_sampler=NormalSampler(act_dim),
+        seed=cfg["seed"],
+    )
+    actor = ppo_module.Actor(actor_arch, actor_dist, device)
 
-# shortcuts
-ob_dim = env.num_obs
-act_dim = env.num_acts
-num_threads = cfg["environment"]["num_threads"]
+    # Critic
+    critic_arch = ppo_module.MLP(
+        cfg["architecture"]["value_net"], nn.LeakyReLU, ob_dim, 1
+    )
+    critic = ppo_module.Critic(critic_arch, device)
 
-# Training
-n_steps = math.floor(cfg["environment"]["max_time"] / cfg["environment"]["control_dt"])
-total_steps = n_steps * env.num_envs
+    return actor, critic
 
-avg_rewards = []
 
-actor = ppo_module.Actor(
-    ppo_module.MLP(cfg["architecture"]["policy_net"], nn.LeakyReLU, ob_dim, act_dim),
-    ppo_module.MultivariateGaussianDiagonalCovariance(
-        act_dim, env.num_envs, 1.0, NormalSampler(act_dim), cfg["seed"]
-    ),
-    device,
-)
-critic = ppo_module.Critic(
-    ppo_module.MLP(cfg["architecture"]["value_net"], nn.LeakyReLU, ob_dim, 1), device
-)
+def save_model(update, saver, actor, critic, optimizer):
+    """Save model checkpoints (actor, critic, optimizer) at a given iteration."""
+    save_path = os.path.join(saver.data_dir, f"full_{update}.pt")
+    torch.save(
+        {
+            "actor_architecture_state_dict": actor.architecture.state_dict(),
+            "actor_distribution_state_dict": actor.distribution.state_dict(),
+            "critic_architecture_state_dict": critic.architecture.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+        },
+        save_path,
+    )
+    return save_path
 
-saver = ConfigurationSaver(
-    log_dir=home_path + "/raisimGymTorch/data/" + task_name,
-    save_items=[task_path + "/cfg.yaml", task_path + "/Environment.hpp"],
-)
-tensorboard_launcher(
-    saver.data_dir + "/.."
-)  # press refresh (F5) after the first ppo update
 
-ppo = PPO.PPO(
-    actor=actor,
-    critic=critic,
-    num_envs=cfg["environment"]["num_envs"],
-    num_transitions_per_env=n_steps,
-    num_learning_epochs=4,
-    gamma=0.996,
-    lam=0.95,
-    num_mini_batches=4,
-    device=device,
-    log_dir=saver.data_dir,
-    shuffle_batch=False,
-)
+def load_graph_for_evaluation(cfg, ob_dim, act_dim, model_path):
+    """Load a new MLP for evaluation from a saved checkpoint."""
+    loaded_graph = ppo_module.MLP(
+        cfg["architecture"]["policy_net"], nn.LeakyReLU, ob_dim, act_dim
+    )
+    checkpoint = torch.load(model_path)
+    loaded_graph.load_state_dict(checkpoint["actor_architecture_state_dict"])
+    return loaded_graph
 
-reward_analyzer = RewardAnalyzer(env, ppo.writer)
 
-if mode == "retrain":
-    load_param(weight_path, env, actor, critic, ppo.optimizer, saver.data_dir)
+def evaluate_policy(env, ppo, loaded_graph, reward_analyzer, cfg, update):
+    """Evaluate the current policy by visualizing, recording a video, and collecting reward info."""
+    env.turn_on_visualization()
+    video_filename = (
+        datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S") + f"policy_{update}.mp4"
+    )
+    env.start_video_recording(video_filename)
 
-for update in range(1000000):
-    start = time.time()
+    n_steps = math.floor(
+        cfg["environment"]["max_time"] / cfg["environment"]["control_dt"]
+    )
+    for _ in range(n_steps):
+        with torch.no_grad():
+            frame_start = time.time()
+            obs = env.observe(False)
+            action = loaded_graph.architecture(torch.from_numpy(obs).cpu())
+            reward, dones = env.step(action.cpu().detach().numpy())
+            reward_analyzer.add_reward_info(env.get_reward_info())
+            frame_time = time.time() - frame_start
+            wait_time = cfg["environment"]["control_dt"] - frame_time
+            if wait_time > 0.0:
+                time.sleep(wait_time)
+
+    env.stop_video_recording()
+    env.turn_off_visualization()
+
+    reward_analyzer.analyze_and_plot(update)
     env.reset()
-    reward_sum = 0
-    done_sum = 0
-    average_dones = 0.0
 
-    if update % cfg["environment"]["eval_every_n"] == 0:
-        print("Visualizing and evaluating the current policy")
-        torch.save(
-            {
-                "actor_architecture_state_dict": actor.architecture.state_dict(),
-                "actor_distribution_state_dict": actor.distribution.state_dict(),
-                "critic_architecture_state_dict": critic.architecture.state_dict(),
-                "optimizer_state_dict": ppo.optimizer.state_dict(),
-            },
-            saver.data_dir + "/full_" + str(update) + ".pt",
-        )
-        # we create another graph just to demonstrate the save/load method
-        loaded_graph = ppo_module.MLP(
-            cfg["architecture"]["policy_net"], nn.LeakyReLU, ob_dim, act_dim
-        )
-        loaded_graph.load_state_dict(
-            torch.load(saver.data_dir + "/full_" + str(update) + ".pt")[
-                "actor_architecture_state_dict"
-            ]
-        )
 
-        env.turn_on_visualization()
-        env.start_video_recording(
-            datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-            + "policy_"
-            + str(update)
-            + ".mp4"
-        )
+def main():
+    # ----------------
+    # Initialization
+    # ----------------
+    args = parse_arguments()
+    mode = args.mode
+    weight_path = args.weight
 
-        for step in range(n_steps):
-            with torch.no_grad():
-                frame_start = time.time()
-                obs = env.observe(False)
-                action = loaded_graph.architecture(torch.from_numpy(obs).cpu())
-                reward, dones = env.step(action.cpu().detach().numpy())
-                reward_analyzer.add_reward_info(env.get_reward_info())
-                frame_end = time.time()
-                wait_time = cfg["environment"]["control_dt"] - (frame_end - frame_start)
-                if wait_time > 0.0:
-                    time.sleep(wait_time)
+    # Check device
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        env.stop_video_recording()
-        env.turn_off_visualization()
+    # Directories and paths
+    task_name = "raibo2_locomotion"
+    task_path = os.path.dirname(os.path.realpath(__file__))
+    home_path = os.path.join(task_path, "../../../..")
 
-        reward_analyzer.analyze_and_plot(update)
+    # Load config
+    cfg = YAML().load(open(os.path.join(task_path, "cfg.yaml"), "r"))
+
+    # Create environment
+    env = create_environment(cfg, home_path)
+    ob_dim = env.num_obs
+    act_dim = env.num_acts
+
+    # Steps and other parameters
+    n_steps = math.floor(
+        cfg["environment"]["max_time"] / cfg["environment"]["control_dt"]
+    )
+    total_steps = n_steps * env.num_envs
+
+    # Create actor and critic
+    actor, critic = create_actor_critic(cfg, ob_dim, act_dim, device)
+
+    # Configuration Saver
+    saver = ConfigurationSaver(
+        log_dir=os.path.join(home_path, "raisimGymTorch", "data", task_name),
+        save_items=[
+            os.path.join(task_path, "cfg.yaml"),
+            os.path.join(task_path, "Environment.hpp"),
+        ],
+    )
+    tensorboard_launcher(os.path.join(saver.data_dir, ".."))
+
+    # Create PPO object
+    ppo = PPO.PPO(
+        actor=actor,
+        critic=critic,
+        num_envs=cfg["environment"]["num_envs"],
+        num_transitions_per_env=n_steps,
+        num_learning_epochs=4,
+        gamma=0.996,
+        lam=0.95,
+        num_mini_batches=4,
+        device=device,
+        log_dir=saver.data_dir,
+        shuffle_batch=False,
+    )
+
+    # Reward Analyzer
+    reward_analyzer = RewardAnalyzer(env, ppo.writer)
+
+    # Foothold Predictor
+    foothold_predictor = FootHoldPredictor(cfg, ppo.writer)
+
+    # Optionally load weights if retraining
+    if mode == "retrain" and weight_path:
+        load_param(weight_path, env, actor, critic, ppo.optimizer, saver.data_dir)
+
+    # ----------------
+    # Training loop
+    # ----------------
+    avg_rewards = []
+    avg_performance = 0
+    for update in range(1_000_000):
+        start_time = time.time()
         env.reset()
-        env.save_scaling(saver.data_dir, str(update))
+        total_reward = 0
+        total_done = 0
 
-    # actual training
-    for step in range(n_steps):
-        obs = env.observe()
-        action = ppo.act(obs)
-        reward, dones = env.step(action)
-        ppo.step(value_obs=obs, rews=reward, dones=dones)
-        done_sum = done_sum + np.sum(dones)
-        reward_sum = reward_sum + np.sum(reward)
+        # Evaluate current policy periodically
+        if update % cfg["environment"]["eval_every_n"] == 0:
+            print("Visualizing and evaluating the current policy")
+            model_path = save_model(update, saver, actor, critic, ppo.optimizer)
 
-    # take st step to get value obs
-    obs = env.observe()
-    ppo.update(
-        actor_obs=obs, value_obs=obs, log_this_iteration=update % 10 == 0, update=update
-    )
-    average_ll_performance = reward_sum / total_steps
-    average_dones = done_sum / total_steps
-    avg_rewards.append(average_ll_performance)
+            # Load a separate graph for demonstration of save/load
+            loaded_graph = load_graph_for_evaluation(cfg, ob_dim, act_dim, model_path)
+            evaluate_policy(env, ppo, loaded_graph, reward_analyzer, cfg, update)
+            env.save_scaling(saver.data_dir, str(update))
 
-    actor.update()
-    actor.distribution.enforce_minimum_std((torch.ones(12) * 0.2).to(device))
+        foothold_update = update % 5 == 0 and avg_performance > 2.4
 
-    # curriculum update. Implement it in Environment.hpp
-    env.curriculum_callback()
+        # Collect experience
+        for step in range(n_steps):
+            obs = env.observe()
+            action = ppo.act(obs)
+            reward, dones = env.step(action)
 
-    end = time.time()
+            if foothold_update:
+                foothold_predictor.step(env.get_footholds())
 
-    print("----------------------------------------------------")
-    print("{:>6}th iteration".format(update))
-    print(
-        "{:<40} {:>6}".format(
-            "average ll reward: ", "{:0.10f}".format(average_ll_performance)
+            ppo.step(value_obs=obs, rews=reward, dones=dones)
+            total_done += np.sum(dones)
+            total_reward += np.sum(reward)
+
+        # Final step for advantage/value calculation
+        last_obs = env.observe()
+        ppo.update(
+            actor_obs=last_obs,
+            value_obs=last_obs,
+            log_this_iteration=(update % 10 == 0),
+            update=update,
         )
-    )
-    print("{:<40} {:>6}".format("dones: ", "{:0.6f}".format(average_dones)))
-    print(
-        "{:<40} {:>6}".format(
-            "time elapsed in this iteration: ", "{:6.4f}".format(end - start)
-        )
-    )
-    print("{:<40} {:>6}".format("fps: ", "{:6.0f}".format(total_steps / (end - start))))
-    print(
-        "{:<40} {:>6}".format(
-            "real time factor: ",
-            "{:6.0f}".format(
-                total_steps / (end - start) * cfg["environment"]["control_dt"]
-            ),
-        )
-    )
-    print("----------------------------------------------------\n")
+
+        # Compute average performance
+        avg_performance = total_reward / total_steps
+        avg_dones = total_done / total_steps
+        avg_rewards.append(avg_performance)
+        
+        # Train foothold predictor
+        if foothold_update:
+            foothold_predictor.flatten_footholds()
+            foothold_predictor.train_lstm(20, update)
+            if update % 100 == 0:
+                foothold_predictor.plot_evaluation(update)
+            foothold_predictor.reset()
+
+        # Update actor distribution parameters if needed
+        actor.update()
+        actor.distribution.enforce_minimum_std((torch.ones(12) * 0.2).to(device))
+
+        # Curriculum callback in environment
+        env.curriculum_callback()
+
+        # ----------------
+        # Logging
+        # ----------------
+        iteration_time = time.time() - start_time
+        fps = total_steps / iteration_time
+        real_time_factor = fps * cfg["environment"]["control_dt"]
+
+        print("----------------------------------------------------")
+        print(f"{update:>6}th iteration")
+        print(f"{'average ll reward:':<40} {avg_performance:0.10f}")
+        print(f"{'dones:':<40} {avg_dones:0.6f}")
+        print(f"{'time elapsed in this iteration:':<40} {iteration_time:6.4f}")
+        print(f"{'fps:':<40} {fps:6.0f}")
+        print(f"{'real time factor:':<40} {real_time_factor:6.0f}")
+        print("----------------------------------------------------\n")
+
+
+if __name__ == "__main__":
+    main()
