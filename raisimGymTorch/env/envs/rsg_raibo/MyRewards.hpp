@@ -53,15 +53,15 @@ public:
 
     ///// Feet Air Time /////
     auto contacts = raibo_->getContacts();
+    std::fill(contacts_.begin(), contacts_.end(), false);
     for (const auto &contact : contacts) {
       int index = contact.getlocalBodyIndex();
+      // RSINFO("contact index" << index);
       // Update foot contact status
       for (size_t i = 0; i < foot_indices_.size(); ++i) {
         if (foot_indices_[i] == index) {
           contacts_[i] = true;
           break;
-        } else {
-          contacts_[i] = false;
         }
       }
     }
@@ -69,7 +69,7 @@ public:
     double air_time_sum{0.};
 
     for (size_t i = 0; i < foot_indices_.size(); ++i) {
-      first_contacts_[i] = air_times_[i] != 0. && contacts_[i];
+      first_contacts_[i] = (air_times_[i] != 0.) && contacts_[i];
       if (first_contacts_[i]) {
         air_time_sum += air_times_[i] - 0.5;
       }

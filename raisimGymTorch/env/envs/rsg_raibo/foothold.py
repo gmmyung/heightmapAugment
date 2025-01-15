@@ -32,12 +32,12 @@ class FootHoldPredictor:
     def step(self, coords):
         # Vectorized contact check using sum of squares for speed
         contacts = np.sum(coords**2, axis=-1) > 0.0  # shape (num_envs, 4)
-
+        
         # Find indices where contacts occur
         indices = np.where(contacts)
         num_contacts = indices[0].shape[0]
         if num_contacts == 0:
-            return  # No contacts, nothing to process
+            return  # No contacts, nothing to process   
 
         # Preallocate array for new footholds for all contacts at once
         new_footholds = np.zeros((num_contacts, 7))

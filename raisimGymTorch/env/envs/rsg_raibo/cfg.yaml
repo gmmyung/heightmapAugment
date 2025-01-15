@@ -20,9 +20,9 @@ environment:
       max_ang: 1.0
       coeff: 1.0
     torque:
-      coeff: -1e-5
+      coeff: -3e-5
     air_time:
-      coeff: 20.0
+      coeff: 10.0
 
 architecture:
   policy_net: [128, 128]

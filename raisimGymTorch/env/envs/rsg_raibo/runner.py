@@ -219,7 +219,8 @@ def main():
             evaluate_policy(env, ppo, loaded_graph, reward_analyzer, cfg, update)
             env.save_scaling(saver.data_dir, str(update))
 
-        foothold_update = update % 5 == 0 and avg_performance > 2.4
+        foothold_update = update % 5 == 0 and avg_performance > 2.0
+        # foothold_update = update % 5 == 0 
 
         # Collect experience
         for step in range(n_steps):
