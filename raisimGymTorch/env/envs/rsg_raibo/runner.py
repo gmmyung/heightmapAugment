@@ -25,7 +25,6 @@ import raisimGymTorch.algo.ppo.ppo as PPO
 import raisimGymTorch.algo.ppo.module as ppo_module
 
 
-
 def parse_arguments():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser()
@@ -219,8 +218,9 @@ def main():
             evaluate_policy(env, ppo, loaded_graph, reward_analyzer, cfg, update)
             env.save_scaling(saver.data_dir, str(update))
 
-        foothold_update = update % 5 == 0 and avg_performance > 2.0
-        # foothold_update = update % 5 == 0 
+        foothold_update = avg_performance > 2.0
+        # foothold_update = update % 5 == 0
+        # foothold_update = False
 
         # Collect experience
         for step in range(n_steps):
@@ -229,7 +229,16 @@ def main():
             reward, dones = env.step(action)
 
             if foothold_update:
-                foothold_predictor.step(env.get_footholds())
+                contacts = env.get_footholds()
+                foothold_log_prob = foothold_predictor.log_probability(contacts)
+                # TODO: make this a config
+                reward -= 1.0 * foothold_log_prob
+                ppo.writer.add_scalar(
+                    "foothold/foothold_log_prob",
+                    foothold_log_prob.mean().item(),
+                    update,
+                )
+                foothold_predictor.step(contacts)
 
             ppo.step(value_obs=obs, rews=reward, dones=dones)
             total_done += np.sum(dones)
@@ -248,11 +257,11 @@ def main():
         avg_performance = total_reward / total_steps
         avg_dones = total_done / total_steps
         avg_rewards.append(avg_performance)
-        
+
         # Train foothold predictor
         if foothold_update:
             foothold_predictor.flatten_footholds()
-            foothold_predictor.train_lstm(20, update)
+            foothold_predictor.train_lstm(epochs=1, update=update)
             if update % 100 == 0:
                 foothold_predictor.plot_evaluation(update)
             foothold_predictor.reset()

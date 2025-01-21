@@ -65,16 +65,20 @@ public:
       }
 
       // If contact is too far from the foot frame, episode terminates
+      bool isFootContact = false;
       for (const size_t &frameIndex : footFrameIndicies_) {
         auto frame = raibo_->getFrameByIdx(frameIndex);
         raisim::Vec<3> framePosition;
         raibo_->getFramePosition(frameIndex, framePosition);
 
         if ((contact.getPosition() - framePosition).squaredNorm() < 0.05) {
-          return false;
+          isFootContact = true;
         }
       }
-      return true;
+
+      if (!isFootContact) {
+        return true;
+      }
     }
 
     terminalReward = 0.f;

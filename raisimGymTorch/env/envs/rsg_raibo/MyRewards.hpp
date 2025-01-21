@@ -51,12 +51,20 @@ public:
 
     record("command_vel_error", error);
 
+    ///// Joint Velocity /////
+    prevJointVelocities_ = jointVelocities_;
+    jointVelocities_ = gv.tail(12);
+    record("joint_velocity", jointVelocities_.squaredNorm());
+
+    ///// Joint Acceleration /////
+    jointAccelerations_ = jointVelocities_ - prevJointVelocities_;
+    record("joint_acceleration", jointAccelerations_.squaredNorm());
+
     ///// Feet Air Time /////
     auto contacts = raibo_->getContacts();
     std::fill(contacts_.begin(), contacts_.end(), false);
     for (const auto &contact : contacts) {
       int index = contact.getlocalBodyIndex();
-      // RSINFO("contact index" << index);
       // Update foot contact status
       for (size_t i = 0; i < foot_indices_.size(); ++i) {
         if (foot_indices_[i] == index) {
@@ -103,6 +111,8 @@ private:
   std::vector<bool> first_contacts_;
   std::vector<double> air_times_;
   double command_max_x_, command_max_y_, command_max_ang_;
+  Eigen::VectorXd jointVelocities_, prevJointVelocities_, jointAccelerations_;
+  size_t nJoints_;
 
   void setupReward(const Yaml::Node &cfg) {
     command_max_x_ = cfg["command_vel_error"]["max_x"].As<double>();

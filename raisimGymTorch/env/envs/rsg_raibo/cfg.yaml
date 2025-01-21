@@ -20,10 +20,17 @@ environment:
       max_ang: 1.0
       coeff: 1.0
     torque:
-      coeff: -3e-5
+      coeff: -4.0e-5
     air_time:
-      coeff: 10.0
+      coeff: 2.0
+    joint_velocity:
+      # coeff: -1.6e-3
+      coeff: 0.0
+    joint_acceleration:
+      # coeff: -1.0e-3
+      coeff: 0.0
 
 architecture:
   policy_net: [128, 128]
   value_net: [128, 128]
+

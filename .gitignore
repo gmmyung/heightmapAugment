@@ -15,3 +15,9 @@ build/compile_commands.json
 .venv
 build/temp.linux-x86_64-cpython-312
 raisimGymTorch/env/envs/rsg_raibo/__pycache__
+raisimGymTorch/env/.DS_Store
+raisimGymTorch/env/._.DS_Store
+raisimGymTorch/.DS_Store
+raisimGymTorch/._.DS_Store
+.DS_Store
+._.DS_Store
