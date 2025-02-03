@@ -252,7 +252,9 @@ class FootHoldPredictor:
                 continue
             # Gather the last seq_len footholds
             past_seq = np.array(
-                foot_history[-seq_len:], dtype=np.float32
+                # foot_history[-seq_len:], dtype=np.float32
+                list(foot_history)[-seq_len:],
+                dtype=np.float32,
             )  # (seq_len, 7)
             next_foot = new_footholds[i]  # (7,)
 
@@ -497,3 +499,11 @@ class MixedFootholdProbLoss(nn.Module):
 
         total_loss = foot_id_loss + coords_loss
         return total_loss
+
+def main():
+    pass
+
+if __name__ == "__main__":
+    main()
+
+    

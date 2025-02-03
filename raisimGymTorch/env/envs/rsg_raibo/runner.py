@@ -232,7 +232,7 @@ def main():
                 contacts = env.get_footholds()
                 foothold_log_prob = foothold_predictor.log_probability(contacts)
                 # TODO: make this a config
-                reward -= 1.0 * foothold_log_prob
+                # reward = reward * (1.0 + 2.0 * (1.0 - np.exp(foothold_log_prob)))
                 ppo.writer.add_scalar(
                     "foothold/foothold_log_prob",
                     foothold_log_prob.mean().item(),
